@@ -1,0 +1,156 @@
+---
+substitutions:
+  name: "comfortnet-thermostat"
+
+comfortnet:
+  on_packet:
+    - packet_type: 0x81 # Configuration data
+      target_device_type: 0x01
+      register_polling: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            std::vector<comfortnet::DBIDDatagram> parsed;
+            client->read_mdi(data.payload, data.payload_len, &parsed);
+            for (auto & datagram : parsed) {
+              if (datagram.dbid_tag == 0 && datagram.db_len == 33) {
+                if (datagram.data[2] != 0xFF) {
+                  id(thermostat_balance_point_setpoint).publish_state(datagram.data[2]);
+                }
+                id(thermostat_comfort_recovery_mode).publish_state((datagram.data[10] & (1 << 7)) != 0);
+                id(thermostat_keypad_lockout).publish_state((datagram.data[10] & (1 << 6)) != 0);
+                id(thermostat_fast_second_stage).publish_state((datagram.data[10] & (1 << 4)) != 0);
+                id(thermostat_continuous_display_light).publish_state((datagram.data[10] & (1 << 3)) != 0);
+                id(thermostat_compressor_lockout).publish_state((datagram.data[10] & (1 << 2)) != 0);
+                if ((datagram.data[12] & (1 << 2)) == 0) {
+                  if ((datagram.data[12] & (1 << 3)) == 0) {
+                    id(thermostat_program_profile_type).publish_state("Non-Programmable");
+                  } else {
+                    id(thermostat_program_profile_type).publish_state("7 Day");
+                  }
+                } else {
+                  if ((datagram.data[12] & (1 << 3)) == 0) {
+                    id(thermostat_program_profile_type).publish_state("5-1-1");
+                  } else {
+                    id(thermostat_program_profile_type).publish_state("5-2");
+                  }
+                }
+                if ((datagram.data[12] & (1 << 1)) == 0) {
+                  if ((datagram.data[12] & 1) == 0) {
+                    id(thermostat_programmable_interval_type).publish_state("4-Step");
+                  } else {
+                    id(thermostat_programmable_interval_type).publish_state("2-Step");
+                  }
+                } else {
+                  if ((datagram.data[12] & 1) == 0) {
+                    id(thermostat_programmable_interval_type).publish_state("Non-Programmable");
+                  } else {
+                    id(thermostat_programmable_interval_type).publish_state("Invalid");
+                  }
+                }
+                if (datagram.data[13] != 0xFF) {
+                  id(thermostat_air_handler_lockout_point).publish_state(datagram.data[13]);
+                }
+              }
+            }
+    - packet_type: 0x8E # Identification data
+      target_device_type: 0x01
+      register_polling: true
+      poll_once: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            char idbuf[7];
+            snprintf(idbuf, 7, "0x%04X", (data.payload[1] << 8) | data.payload[0]);
+            id(thermostat_manufacturer_id).publish_state(idbuf);
+    - packet_type: 0x82 # Status data
+      target_device_type: 0x01
+      register_polling: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            std::vector<comfortnet::DBIDDatagram> parsed;
+            client->read_mdi(data.payload, data.payload_len, &parsed);
+            for (auto & datagram : parsed) {
+              if (datagram.dbid_tag == 0 && datagram.db_len > 2) {
+                char faultbuf[5];
+                snprintf(faultbuf, 5, "0x%02X", datagram.data[0]);
+                id(thermostat_critical_fault).publish_state(faultbuf);
+                snprintf(faultbuf, 5, "0x%02X", datagram.data[1]);
+                id(thermostat_minor_fault).publish_state(faultbuf);
+              }
+            }
+    - packet_type: 0x87 # Sensor data
+      target_device_type: 0x01
+      register_polling: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+
+binary_sensor:
+  - platform: template
+    name: "Thermostat Comfort Recovery Mode"
+    id: thermostat_comfort_recovery_mode
+    icon: "mdi:information-box"
+  - platform: template
+    name: "Thermostat Keypad Lockout"
+    id: thermostat_keypad_lockout
+    icon: "mdi:lock"
+  - platform: template
+    name: "Thermostat Fast 2nd Stage Cool/Heat/Aux"
+    id: thermostat_fast_second_stage
+    icon: "mdi:information-box"
+  - platform: template
+    name: "Thermostat Continuous Display Light"
+    id: thermostat_continuous_display_light
+    icon: "mdi:lightbulb"
+  - platform: template
+    name: "Thermostat Compressor Lockout"
+    id: thermostat_compressor_lockout
+    icon: "mdi:lock"
+
+sensor:
+  - platform: template
+    name: "Thermostat Balance Point"
+    id: thermostat_balance_point_setpoint
+    device_class: "temperature"
+    unit_of_measurement: "F"
+    icon: "mdi:heating-coil"
+    accuracy_decimals: 0
+  - platform: template
+    name: "Thermostat Air Handler Lockout Point"
+    id: thermostat_air_handler_lockout_point
+    device_class: "temperature"
+    unit_of_measurement: "F"
+    icon: "mdi:heating-coil"
+    accuracy_decimals: 0
+
+text_sensor:
+  - platform: template
+    name: "Thermostat Critical Fault"
+    id: thermostat_critical_fault
+    icon: "mdi:alert"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Thermostat Minor Fault"
+    id: thermostat_minor_fault
+    icon: "mdi:alert"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Thermostat Manufacturer ID"
+    id: thermostat_manufacturer_id
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Thermostat SW Version"
+    id: thermostat_sw
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Thermostat Program Profile Type"
+    id: thermostat_program_profile_type
+    icon: "mdi:information-box"
+  - platform: template
+    name: "Thermostat Programmable Interval Type"
+    id: thermostat_programmable_interval_type
+    icon: "mdi:information-box"

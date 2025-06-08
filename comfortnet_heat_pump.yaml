@@ -1,0 +1,178 @@
+---
+substitutions:
+  name: "comfortnet-heat-pump"
+  friendly_name: "ComfortNet HVAC"
+  device_description: "ComfortNet HVAC"
+
+comfortnet:
+  on_control_command:
+    - control_command: 0x64
+      target_device_type: 0x05
+      then:
+        - lambda: |-
+            if (data.payload_len < 2) {
+              return;
+            }
+            id(heat_pump_heat_demand).publish_state(data.payload[1] / 2.0f);
+    - control_command: 0x65
+      target_device_type: 0x05
+      then:
+        - lambda: |-
+            if (data.payload_len < 2) {
+              return;
+            }
+            id(heat_pump_cool_demand).publish_state(data.payload[1] / 2.0f);
+    - control_command: 0x66
+      target_device_type: 0x05
+      then:
+        - lambda: |-
+            if (data.payload_len < 3 || !data.response) {
+              return;
+            }
+            id(heat_pump_fan_demand).publish_state(data.payload[2] / 2.0f);
+  on_packet:
+    - packet_type: 0x8E # Identification data
+      target_device_type: 0x05
+      register_polling: true
+      poll_once: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            char idbuf[7];
+            snprintf(idbuf, 7, "0x%04X", (data.payload[1] << 8) | data.payload[0]);
+            id(heat_pump_manufacturer_id).publish_state(idbuf);
+    - packet_type: 0x82 # Status data
+      target_device_type: 0x05
+      register_polling: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            std::vector<comfortnet::DBIDDatagram> parsed;
+            client->read_mdi(data.payload, data.payload_len, &parsed);
+            for (auto & datagram : parsed) {
+              if (datagram.dbid_tag == 0 && datagram.db_len == 12) {
+                char faultbuf[5];
+                snprintf(faultbuf, 5, "0x%02X", datagram.data[0]);
+                id(heat_pump_critical_fault).publish_state(faultbuf);
+                snprintf(faultbuf, 5, "0x%02X", datagram.data[1]);
+                id(heat_pump_minor_fault).publish_state(faultbuf);
+                id(heat_pump_heat_demand).publish_state(datagram.data[2] / 2.0f);
+                id(heat_pump_cool_demand).publish_state(datagram.data[3] / 2.0f);
+                id(heat_pump_dehumidification_demand).publish_state(datagram.data[4] / 2.0f);
+                id(heat_pump_heat_actual).publish_state(datagram.data[5] / 2.0f);
+                id(heat_pump_cool_actual).publish_state(datagram.data[6] / 2.0f);
+                id(heat_pump_defrost_demand).publish_state(datagram.data[7] / 2.0f);
+                id(heat_pump_fan_demand).publish_state(datagram.data[8] / 2.0f);
+                id(heat_pump_dehumidification_actual).publish_state(datagram.data[11] / 2.0f);
+              }
+            }
+    - packet_type: 0x87 # Sensor data
+      target_device_type: 0x05
+      register_polling: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            std::vector<comfortnet::DBIDDatagram> parsed;
+            client->read_mdi(data.payload, data.payload_len, &parsed);
+            for (auto & datagram : parsed) {
+              if (datagram.dbid_tag == 0 && datagram.db_len == 2) {
+                uint16_t combined = static_cast<uint16_t>((datagram.data[1] << 8) | datagram.data[0]);
+                bool is_valid = (combined & (1 << 15)) != 0;
+                if (is_valid) {
+                  bool is_negative = (combined & (1 << 14)) != 0;
+                  int16_t whole_value = ((combined >> 4) & 0x3FF) * (is_negative ? -1 : 1);
+                  uint16_t fraction_value = combined & 0x0F;
+                  float sensor_value = (static_cast<float>(fraction_value) / 16.0f) + static_cast<float>(whole_value);
+                  id(heat_pump_outdoor_air_temperature).publish_state(sensor_value);
+                }
+              }
+            }
+
+sensor:
+  - platform: template
+    name: "Heat Pump Heat Demand"
+    id: heat_pump_heat_demand
+    unit_of_measurement: "%"
+    icon: "mdi:heating-coil"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Heat Pump Cool Demand"
+    id: heat_pump_cool_demand
+    unit_of_measurement: "%"
+    icon: "mdi:snowflake"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Heat Pump Dehumidification Demand"
+    id: heat_pump_dehumidification_demand
+    unit_of_measurement: "%"
+    icon: "mdi:water-percent"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Heat Pump Heat Actual"
+    id: heat_pump_heat_actual
+    unit_of_measurement: "%"
+    icon: "mdi:heating-coil"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Heat Pump Cool Actual"
+    id: heat_pump_cool_actual
+    unit_of_measurement: "%"
+    icon: "mdi:snowflake"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Heat Pump Defrost Demand"
+    id: heat_pump_defrost_demand
+    unit_of_measurement: "%"
+    icon: "mdi:snowflake-melt"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Heat Pump Fan Demand"
+    id: heat_pump_fan_demand
+    unit_of_measurement: "%"
+    icon: "mdi:fan"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Heat Pump Dehumidification Actual"
+    id: heat_pump_dehumidification_actual
+    unit_of_measurement: "%"
+    icon: "mdi:water-percent"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Heat Pump Outdoor Air Temperature"
+    id: heat_pump_outdoor_air_temperature
+    device_class: "temperature"
+    unit_of_measurement: "F"
+    icon: "mdi:thermometer"
+    accuracy_decimals: 4
+
+text_sensor:
+  - platform: template
+    name: "Heat Pump Critical Fault"
+    id: heat_pump_critical_fault
+    icon: "mdi:alert"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Heat Pump Minor Fault"
+    id: heat_pump_minor_fault
+    icon: "mdi:alert"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Heat Pump Manufacturer ID"
+    id: heat_pump_manufacturer_id
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Heat Pump Model Number"
+    id: heat_pump_model_num
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Heat Pump Serial Number"
+    id: heat_pump_serial_num
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Heat Pump SW Version"
+    id: heat_pump_sw
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"

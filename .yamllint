@@ -1,0 +1,14 @@
+---
+extends: default
+
+rules:
+  comments-indentation: disable
+  line-length: disable
+    # level: warning
+    # allow-non-breakable-inline-mappings: true
+  truthy:
+    check-keys: false
+
+ignore: |
+  .esphome
+  .clang-format

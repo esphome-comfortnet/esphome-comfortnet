@@ -1,0 +1,56 @@
+---
+substitutions:
+  name: "comfortnet-other"
+
+comfortnet:
+  on_packet:
+    - packet_type: 0x8E # Identification data
+      target_device_type: 0x29
+      register_polling: true
+      poll_once: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            char idbuf[7];
+            snprintf(idbuf, 7, "0x%04X", (data.payload[1] << 8) | data.payload[0]);
+            id(other_manufacturer_id).publish_state(idbuf);
+    - packet_type: 0x82 # Status data
+      target_device_type: 0x29
+      register_polling: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            std::vector<comfortnet::DBIDDatagram> parsed;
+            client->read_mdi(data.payload, data.payload_len, &parsed);
+            for (auto & datagram : parsed) {
+              if (datagram.dbid_tag == 0 && datagram.db_len > 2) {
+                char faultbuf[5];
+                snprintf(faultbuf, 5, "0x%02X", datagram.data[0]);
+                id(other_critical_fault).publish_state(faultbuf);
+                snprintf(faultbuf, 5, "0x%02X", datagram.data[1]);
+                id(other_minor_fault).publish_state(faultbuf);
+              }
+            }
+    - packet_type: 0x87 # Sensor data
+      target_device_type: 0x29
+      register_polling: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+
+text_sensor:
+  - platform: template
+    name: "Other Critical Fault"
+    id: other_critical_fault
+    icon: "mdi:alert"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Other Minor Fault"
+    id: other_minor_fault
+    icon: "mdi:alert"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Other Manufacturer ID"
+    id: other_manufacturer_id
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"

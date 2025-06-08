@@ -1,0 +1,113 @@
+---
+substitutions:
+  name: "comfortnet"
+  friendly_name: "ComfortNet Device"
+  device_description: "ComfortNet Device"
+  tx_pin: GPIO19
+  rx_pin: GPIO22
+  platform: esp32
+  board: esp32dev
+  variant: esp32
+  framework: esp-idf
+  logger_level: WARN
+  comfortnet_update_interval: 30s
+  device_type: "0x1D" # Gateway device ID
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: ${device_description}
+  min_version: "2024.11.0"
+  project:
+    name: "esphome-comfortnet.esphome-comfortnet"
+    version: v1.0.0
+  includes:
+    - <vector>
+  on_boot:
+    then:
+      - lambda: App.set_loop_interval(0);
+${platform}:
+  board: ${board}
+  variant: ${variant}
+  framework:
+    type: ${framework}
+preferences:
+  flash_write_interval: "24h"
+wifi:
+  ap:
+captive_portal:
+# api:
+#   services:
+#     - service: read
+#       variables:
+#         datapoint_id: string
+#       then:
+#         - lambda: id(comfortnet_id).homeassistant_read(datapoint_id);
+#     - service: read_from_address
+#       variables:
+#         datapoint_id: string
+#         address: int
+#       then:
+#         - lambda: id(comfortnet_id).homeassistant_read(datapoint_id, (uint8_t) address);
+#     - service: write_enum
+#       variables:
+#         datapoint_id: string
+#         value: int
+#       then:
+#         - lambda: id(comfortnet_id).homeassistant_write(datapoint_id, (uint8_t) value);
+#     - service: write_enum_from_address
+#       variables:
+#         datapoint_id: string
+#         value: int
+#         address: int
+#       then:
+#         - lambda: id(comfortnet_id).homeassistant_write(datapoint_id, (uint8_t) value, (uint8_t) address);
+#     - service: write_float
+#       variables:
+#         datapoint_id: string
+#         value: float
+#       then:
+#         - lambda: id(comfortnet_id).homeassistant_write(datapoint_id, value);
+#     - service: write_float_from_address
+#       variables:
+#         datapoint_id: string
+#         value: float
+#         address: int
+#       then:
+#         - lambda: id(comfortnet_id).homeassistant_write(datapoint_id, value, (uint8_t) address);
+ota:
+  platform: esphome
+logger:
+  level: ${logger_level}
+  tx_buffer_size: 1024
+  #baud_rate: 0 # Disable logging over uart
+uart:
+  id: comfortnet_uart
+  baud_rate: 9600
+  data_bits: 8
+  stop_bits: 1
+  parity: NONE
+  rx_buffer_size: 1500
+  tx_pin: ${tx_pin}
+  rx_pin: ${rx_pin}
+comfortnet:
+  id: comfortnet_id
+  uart_id: comfortnet_uart
+  update_interval: ${comfortnet_update_interval}
+  device_type: ${device_type}
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal Strength"
+    id: wifi_signal_sensor
+    entity_category: "diagnostic"
+binary_sensor:
+  - platform: comfortnet
+    name: "ComfortNet Network Status"
+    id: comfortnet_network_status
+    device_class: connectivity
+    data_key: "NETWORK_STATUS"
+button:
+  - platform: restart
+    name: "Restart ESP"
+    id: restart_esp
+    icon: "mdi:restart"
+    entity_category: "config"

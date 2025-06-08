@@ -1,0 +1,224 @@
+---
+substitutions:
+  name: "comfortnet-furnace"
+  friendly_name: "ComfortNet HVAC"
+  device_description: "ComfortNet HVAC"
+
+comfortnet:
+  on_control_command:
+    - control_command: 0x64
+      target_device_type: 0x02
+      then:
+        - lambda: |-
+            if (data.payload_len < 2) {
+              return;
+            }
+            id(furnace_heat_demand).publish_state(data.payload[1] / 2.0f);
+    - control_command: 0x66
+      target_device_type: 0x02
+      then:
+        - lambda: |-
+            if (data.payload_len < 3 || !data.response) {
+              return;
+            }
+            id(furnace_fan_demand).publish_state(data.payload[2] / 2.0f);
+  on_packet:
+    - packet_type: 0x8E # Identification data
+      target_device_type: 0x02
+      register_polling: true
+      poll_once: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            char idbuf[7];
+            snprintf(idbuf, 7, "0x%04X", (data.payload[1] << 8) | data.payload[0]);
+            id(furnace_manufacturer_id).publish_state(idbuf);
+    - packet_type: 0x82 # Status data
+      target_device_type: 0x02
+      register_polling: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            std::vector<comfortnet::DBIDDatagram> parsed;
+            client->read_mdi(data.payload, data.payload_len, &parsed);
+            for (auto & datagram : parsed) {
+              if (datagram.dbid_tag == 0 && datagram.db_len == 22) {
+                char faultbuf[5];
+                snprintf(faultbuf, 5, "0x%02X", datagram.data[0]);
+                id(furnace_critical_fault).publish_state(faultbuf);
+                snprintf(faultbuf, 5, "0x%02X", datagram.data[1]);
+                id(furnace_minor_fault).publish_state(faultbuf);
+                id(furnace_heat_demand).publish_state(datagram.data[2] / 2.0f);
+                id(furnace_cool_demand).publish_state(datagram.data[3] / 2.0f);
+                id(furnace_fan_demand).publish_state(datagram.data[5] / 2.0f);
+                id(furnace_defrost_demand).publish_state(datagram.data[8] / 2.0f);
+                id(furnace_emergency_heat_demand).publish_state(datagram.data[9] / 2.0f);
+                id(furnace_aux_heat_demand).publish_state(datagram.data[10] / 2.0f);
+                id(furnace_humidification_demand).publish_state(datagram.data[11] / 2.0f);
+                id(furnace_dehumidification_demand).publish_state(datagram.data[12] / 2.0f);
+                id(furnace_airflow).publish_state((datagram.data[14] << 8) | datagram.data[13]);
+                id(furnace_heat_actual).publish_state(datagram.data[15] / 2.0f);
+                id(furnace_cool_actual).publish_state(datagram.data[16] / 2.0f);
+                id(furnace_fan_actual).publish_state(datagram.data[17] / 2.0f);
+                id(furnace_humidification_actual).publish_state(datagram.data[20] / 2.0f);
+                id(furnace_dehumidification_actual).publish_state(datagram.data[21] / 2.0f);
+              }
+            }
+    - packet_type: 0x87 # Sensor data
+      target_device_type: 0x02
+      register_polling: true
+      then:
+        - lambda: |-
+            client->device_poll_to_end(data.node_type, data.packet_type_request);
+            std::vector<comfortnet::DBIDDatagram> parsed;
+            client->read_mdi(data.payload, data.payload_len, &parsed);
+            for (auto & datagram : parsed) {
+              if ((datagram.dbid_tag == 0 || datagram.dbid_tag == 1) && datagram.db_len == 2) {
+                uint16_t combined = static_cast<uint16_t>((datagram.data[1] << 8) | datagram.data[0]);
+                bool is_valid = (combined & (1 << 15)) != 0;
+                if (is_valid) {
+                  bool is_negative = (combined & (1 << 14)) != 0;
+                  int16_t whole_value = ((combined >> 4) & 0x3FF) * (is_negative ? -1 : 1);
+                  uint16_t fraction_value = combined & 0x0F;
+                  float sensor_value = (static_cast<float>(fraction_value) / 16.0f) + static_cast<float>(whole_value);
+                  if (datagram.dbid_tag == 0) {
+                    id(furnace_return_air_temperature).publish_state(sensor_value);
+                  } else if (datagram.dbid_tag == 1) {
+                    id(furnace_supply_air_temperature).publish_state(sensor_value);
+                  }
+                }
+              }
+            }
+
+sensor:
+  - platform: template
+    name: "Furnace Heat Demand"
+    id: furnace_heat_demand
+    unit_of_measurement: "%"
+    icon: "mdi:fire"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Cool Demand"
+    id: furnace_cool_demand
+    unit_of_measurement: "%"
+    icon: "mdi:snowflake"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Fan Demand"
+    id: furnace_fan_demand
+    unit_of_measurement: "%"
+    icon: "mdi:fan"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Defrost Heat Demand"
+    id: furnace_defrost_demand
+    unit_of_measurement: "%"
+    icon: "mdi:snowflake-melt"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Emergency Heat Demand"
+    id: furnace_emergency_heat_demand
+    unit_of_measurement: "%"
+    icon: "mdi:fire"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Aux Heat Demand"
+    id: furnace_aux_heat_demand
+    unit_of_measurement: "%"
+    icon: "mdi:fire"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Humidification Demand"
+    id: furnace_humidification_demand
+    unit_of_measurement: "%"
+    icon: "mdi:water-percent"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Dehumidification Demand"
+    id: furnace_dehumidification_demand
+    unit_of_measurement: "%"
+    icon: "mdi:water-percent"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Current Airflow"
+    id: furnace_airflow
+    unit_of_measurement: "ft³/min"
+    icon: "mdi:tailwind"
+    accuracy_decimals: 0
+    device_class: "volume_flow_rate"
+  - platform: template
+    name: "Furnace Heat Actual"
+    id: furnace_heat_actual
+    unit_of_measurement: "%"
+    icon: "mdi:fire"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Cool Actual"
+    id: furnace_cool_actual
+    unit_of_measurement: "%"
+    icon: "mdi:snowflake"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Fan Actual"
+    id: furnace_fan_actual
+    unit_of_measurement: "%"
+    icon: "mdi:fan"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Humidification Actual"
+    id: furnace_humidification_actual
+    unit_of_measurement: "%"
+    icon: "mdi:water-percent"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Dehumidification Actual"
+    id: furnace_dehumidification_actual
+    unit_of_measurement: "%"
+    icon: "mdi:water-percent"
+    accuracy_decimals: 1
+  - platform: template
+    name: "Furnace Return Air Temperature"
+    id: furnace_return_air_temperature
+    device_class: "temperature"
+    unit_of_measurement: "F"
+    icon: "mdi:thermometer"
+    accuracy_decimals: 4
+  - platform: template
+    name: "Furnace Supply Air Temperature"
+    id: furnace_supply_air_temperature
+    device_class: "temperature"
+    unit_of_measurement: "F"
+    icon: "mdi:thermometer"
+    accuracy_decimals: 4
+
+text_sensor:
+  - platform: template
+    name: "Furnace Critical Fault"
+    id: furnace_critical_fault
+    icon: "mdi:alert"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Furnace Minor Fault"
+    id: furnace_minor_fault
+    icon: "mdi:alert"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Furnace Manufacturer ID"
+    id: furnace_manufacturer_id
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Furnace Model Number"
+    id: furnace_model_num
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Furnace Serial Number"
+    id: furnace_serial_num
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Furnace SW Version"
+    id: furnace_sw
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
