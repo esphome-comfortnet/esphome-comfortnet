@@ -12,6 +12,7 @@ substitutions:
   board: m5stack-atoms3
   variant: esp32s3
   framework: esp-idf
+  ct_version: 2
 
 packages:
   comfortnet: !include comfortnet_base.yaml

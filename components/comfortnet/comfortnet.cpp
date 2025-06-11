@@ -212,8 +212,8 @@ void Comfortnet::handle_message_(bool is_tx, uint32_t now) {
           this->mac_address_.write(return_payload);
           this->session_id_.write(return_payload);
           transmit_message_(NodeAddress::COORDINATOR, this->node_id_, this->subnet_, SendMethod::NO_ROUTE, 0, 0,
-                            this->device_type_, PACKET_RESPONSE(message_type), PACKET_NUMBER(false, false),
-                            return_payload, true);
+                            this->device_type_, PACKET_RESPONSE(message_type),
+                            PACKET_NUMBER(false, this->subnet_ == Subnet::VERSION_1), return_payload, true);
         }
       }
     } else if (dst_adr == this->node_id_ && subnet == this->subnet_) {
@@ -249,7 +249,7 @@ void Comfortnet::handle_message_(bool is_tx, uint32_t now) {
             can_reply = false;
           }
           if (can_reply) {
-            pending_messages_.push((struct PendingMessageToType){
+            pending_messages_.push((struct PendingMessageToType) {
                 dev.node_type,
                 dev.poll_message,
                 payload,
@@ -374,9 +374,9 @@ void Comfortnet::handle_message_(bool is_tx, uint32_t now) {
         return_payload.push_back(0x00);  // Reserved
         this->mac_address_.write(return_payload);
         this->session_id_.write(return_payload);
-        transmit_message_(NodeAddress::COORDINATOR, this->node_id_, Subnet::VERSION_2, SendMethod::NO_ROUTE, 0, 0,
-                          this->device_type_, PACKET_RESPONSE(message_type), PACKET_NUMBER(false, false),
-                          return_payload, true);
+        transmit_message_(NodeAddress::COORDINATOR, this->node_id_, Subnet::BROADCAST, SendMethod::NO_ROUTE, 0, 0,
+                          this->device_type_, PACKET_RESPONSE(message_type),
+                          PACKET_NUMBER(false, this->ct_version_ == 1), return_payload, true);
         awaiting_discovery_ = true;
       }
     } else if (is_broadcast && message_type == MessageType::SET_ADDRESS) {
@@ -410,7 +410,7 @@ void Comfortnet::handle_message_(bool is_tx, uint32_t now) {
       if (start_id == static_cast<NodeAddress>(0)) {
         ESP_LOGI(TAG, "Joined network as address: 0x%02X", this->node_id_);
         call_listener_(DATA_KEY_NETWORK_STATUS,
-                       (struct ComfortnetData){this->device_type_, ComfortnetData::DataType::BOOLEAN, true});
+                       (struct ComfortnetData) {this->device_type_, ComfortnetData::DataType::BOOLEAN, true});
       } else if (start_id != this->node_id_) {
         ESP_LOGI(TAG, "Network address reassigned: 0x%02X (Old: 0x%02X)", this->node_id_, start_id);
       }
@@ -435,7 +435,7 @@ void Comfortnet::handle_message_(bool is_tx, uint32_t now) {
     uint8_t cmd_payload_len = payload_len - CONTROL_CMD_SIZE;
     ESP_LOGD(TAG, "Command | Payload HEX");
     ESP_LOGD(TAG, "0x%04X  | %s", command_type, esphome::format_hex_pretty(cmd_payload, cmd_payload_len).c_str());
-    call_command_listener_((struct ComfortnetCommandData){
+    call_command_listener_((struct ComfortnetCommandData) {
         message_type == MessageType::SET_CONTROL_COMMAND ? get_node_type_(dst_adr) : source_node_type,
         get_node_mac_(message_type == MessageType::SET_CONTROL_COMMAND ? dst_adr : src_adr), command_type,
         message_type == MessageType::SET_CONTROL_COMMAND_RESPONSE, cmd_payload, cmd_payload_len});
@@ -444,7 +444,7 @@ void Comfortnet::handle_message_(bool is_tx, uint32_t now) {
                                                     message_type == MessageType::GET_CONFIGURATION_RESPONSE ||
                                                     message_type == MessageType::GET_IDENTIFICATION_RESPONSE)) {
     call_packet_listener_(
-        (struct ComfortnetPacketData){source_node_type, get_node_mac_(src_adr), message_type, payload, payload_len});
+        (struct ComfortnetPacketData) {source_node_type, get_node_mac_(src_adr), message_type, payload, payload_len});
   }
   // End network eavesdropping logic
 }
@@ -568,7 +568,7 @@ void Comfortnet::disconnect_() {
   subnet_ = Subnet::BROADCAST;
   session_id_.clear();
   call_listener_(DATA_KEY_NETWORK_STATUS,
-                 (struct ComfortnetData){this->device_type_, ComfortnetData::DataType::BOOLEAN, false});
+                 (struct ComfortnetData) {this->device_type_, ComfortnetData::DataType::BOOLEAN, false});
 }
 
 }  // namespace comfortnet

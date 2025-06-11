@@ -12,6 +12,7 @@ substitutions:
   logger_level: WARN
   comfortnet_update_interval: 30s
   device_type: "0x1D" # Gateway device ID
+  ct_version: 2 # Version of ClimateTalk (either 1 or 2)
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
@@ -94,6 +95,7 @@ comfortnet:
   uart_id: comfortnet_uart
   update_interval: ${comfortnet_update_interval}
   device_type: ${device_type}
+  ct_version: ${ct_version}
 sensor:
   - platform: wifi_signal
     name: "WiFi Signal Strength"

@@ -11,6 +11,7 @@ from esphome.cpp_helpers import gpio_pin_expression
 
 DEPENDENCIES = ["uart"]
 
+CONF_CT_VERSION = "ct_version"
 CONF_DEVICE_TYPE = "device_type"
 CONF_SENSOR_KEY = "data_key"
 CONF_TARGET_DEVICE_TYPE = "target_device_type"
@@ -47,6 +48,7 @@ CONFIG_SCHEMA = (
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(Comfortnet),
+            cv.Optional(CONF_CT_VERSION, default=2): cv.int_range(min=1, max=2),
             cv.Optional(CONF_DEVICE_TYPE, default=0x1E): cv.int_range(min=1, max=255),
             cv.Optional(CONF_FLOW_CONTROL_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_ON_CONTROL_COMMAND): automation.validate_automation(
@@ -96,6 +98,7 @@ async def to_code(config):
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)
     cg.add(var.set_device_type(config[CONF_DEVICE_TYPE]))
+    cg.add(var.set_ct_version(config[CONF_CT_VERSION]))
     if CONF_FLOW_CONTROL_PIN in config:
         pin = await gpio_pin_expression(config[CONF_FLOW_CONTROL_PIN])
         cg.add(var.set_flow_control_pin(pin))

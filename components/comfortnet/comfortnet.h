@@ -32,7 +32,7 @@ struct PollQueueEntry {
   bool poll_once;
 
   PollQueueEntry(NodeType node_type, MessageType poll_message, bool poll_once)
-      : node_type(node_type), poll_message(poll_message), poll_once(poll_once){};
+      : node_type(node_type), poll_message(poll_message), poll_once(poll_once) {};
 
   bool operator==(const PollQueueEntry &other) const {
     return node_type == other.node_type && poll_message == other.poll_message;
@@ -46,7 +46,7 @@ struct PendingMessage {
   std::vector<uint8_t> payload;
 
   PendingMessage(SendMethod send_method, uint8_t send_param_1, MessageType packet_type, std::vector<uint8_t> payload)
-      : send_method(send_method), send_param_1(send_param_1), packet_type(packet_type), payload(payload){};
+      : send_method(send_method), send_param_1(send_param_1), packet_type(packet_type), payload(payload) {};
 };
 
 struct PendingMessageByCommand : PendingMessage {
@@ -54,7 +54,7 @@ struct PendingMessageByCommand : PendingMessage {
 
   PendingMessageByCommand(SendMethodControlCommand command_type, MessageType packet_type, std::vector<uint8_t> payload)
       : command_type(command_type),
-        PendingMessage(SendMethod::CONTROL_COMMAND, static_cast<uint8_t>(command_type), packet_type, payload){};
+        PendingMessage(SendMethod::CONTROL_COMMAND, static_cast<uint8_t>(command_type), packet_type, payload) {};
 };
 
 struct PendingMessageToType : PendingMessage {
@@ -62,7 +62,7 @@ struct PendingMessageToType : PendingMessage {
 
   PendingMessageToType(NodeType node_type, MessageType packet_type, std::vector<uint8_t> payload)
       : node_type(node_type),
-        PendingMessage(SendMethod::NODE_TYPE, static_cast<uint8_t>(node_type), packet_type, payload){};
+        PendingMessage(SendMethod::NODE_TYPE, static_cast<uint8_t>(node_type), packet_type, payload) {};
 };
 
 struct PendingMessageToAddress : PendingMessage {
@@ -70,7 +70,7 @@ struct PendingMessageToAddress : PendingMessage {
 
   PendingMessageToAddress(NodeAddress dest_address, MessageType packet_type, std::vector<uint8_t> payload)
       : dest_address(dest_address),
-        PendingMessage(SendMethod::NODE_ID, static_cast<uint8_t>(dest_address), packet_type, payload){};
+        PendingMessage(SendMethod::NODE_ID, static_cast<uint8_t>(dest_address), packet_type, payload) {};
 };
 
 struct ComfortnetData {
@@ -80,7 +80,7 @@ struct ComfortnetData {
   DataVariant data;
 
   ComfortnetData(NodeType device_type, DataType type, DataVariant data)
-      : device_type(device_type), type(type), data(data){};
+      : device_type(device_type), type(type), data(data) {};
 };
 
 struct ComfortnetCommandData {
@@ -98,7 +98,7 @@ struct ComfortnetCommandData {
         cmd_type(cmd_type),
         response(response),
         payload(payload),
-        payload_len(payload_len){};
+        payload_len(payload_len) {};
 };
 
 struct ComfortnetPacketData {
@@ -118,7 +118,7 @@ struct ComfortnetPacketData {
         packet_type_request(PACKET_REQUEST(packet_type)),
         packet_type_response(PACKET_RESPONSE(packet_type)),
         payload(payload),
-        payload_len(payload_len){};
+        payload_len(payload_len) {};
 };
 
 struct DBIDDatagram {
@@ -127,7 +127,7 @@ struct DBIDDatagram {
   const uint8_t *data;
 
   DBIDDatagram(uint8_t dbid_tag, uint8_t db_len, const uint8_t *data)
-      : dbid_tag(dbid_tag), db_len(db_len), data(data){};
+      : dbid_tag(dbid_tag), db_len(db_len), data(data) {};
 };
 
 class Comfortnet : public esphome::Component, public esphome::uart::UARTDevice {
@@ -137,6 +137,7 @@ class Comfortnet : public esphome::Component, public esphome::uart::UARTDevice {
   void dump_config() override;
 
   void set_device_type(uint8_t type) { device_type_ = static_cast<NodeType>(type); }
+  void set_ct_version(uint8_t version) { ct_version_ = version; }
   void set_flow_control_pin(esphome::GPIOPin *flow_control_pin) { this->flow_control_pin_ = flow_control_pin; }
 
   void set_update_interval(uint32_t interval_millis) { update_interval_millis_ = interval_millis; }
@@ -174,7 +175,7 @@ class Comfortnet : public esphome::Component, public esphome::uart::UARTDevice {
 
   inline void register_device_polling(NodeType node_type, MessageType poll_message, bool poll_once) {
     auto it = std::find(polling_queue_.begin(), polling_queue_.end(),
-                        (struct PollQueueEntry){node_type, poll_message, poll_once});
+                        (struct PollQueueEntry) {node_type, poll_message, poll_once});
     if (it == polling_queue_.end()) {
       polling_queue_.emplace_back(node_type, poll_message, poll_once);
     } else if (it.base()->poll_once && !poll_once) {
@@ -187,7 +188,7 @@ class Comfortnet : public esphome::Component, public esphome::uart::UARTDevice {
    */
   inline void device_poll_to_end(NodeType node_type, MessageType poll_message) {
     auto it = std::find(polling_queue_.begin(), polling_queue_.end(),
-                        (struct PollQueueEntry){node_type, poll_message, false});
+                        (struct PollQueueEntry) {node_type, poll_message, false});
     if (it != polling_queue_.end()) {
       if (it.base()->poll_once) {
         polling_queue_.erase(it);
@@ -297,6 +298,7 @@ class Comfortnet : public esphome::Component, public esphome::uart::UARTDevice {
   bool has_won_token_broadcast_;                               // Devices can only win token offer once per dataflow
 
   MacAddress mac_address_;
+  uint8_t ct_version_{2};  // Numerical value representing the desired CT version (either 1 or 2)
   NodeType device_type_{NodeType::DIAGNOSTIC_DEVICE};
   NodeAddress node_id_{static_cast<NodeAddress>(0)};
   Subnet subnet_{Subnet::BROADCAST};
